@@ -278,6 +278,35 @@ static void __memcpy_ntdqa(void *dst, const void *src, unsigned long len)
 	kernel_fpu_end();
 }
 
+static void __memcpy_ntdqu(void *dst, const void *src, unsigned long len)
+{
+	kernel_fpu_begin();
+
+	while (len >= 4) {
+		asm("movntdqa   (%0), %%xmm0\n"
+		    "movntdqa 16(%0), %%xmm1\n"
+		    "movntdqa 32(%0), %%xmm2\n"
+		    "movntdqa 48(%0), %%xmm3\n"
+		    "movups %%xmm0,   (%1)\n"
+		    "movups %%xmm1, 16(%1)\n"
+		    "movups %%xmm2, 32(%1)\n"
+		    "movups %%xmm3, 48(%1)\n"
+		    :: "r" (src), "r" (dst) : "memory");
+		src += 64;
+		dst += 64;
+		len -= 4;
+	}
+	while (len--) {
+		asm("movntdqa (%0), %%xmm0\n"
+		    "movups %%xmm0, (%1)\n"
+		    :: "r" (src), "r" (dst) : "memory");
+		src += 16;
+		dst += 16;
+	}
+
+	kernel_fpu_end();
+}
+
 /*
  * __drm_memcpy_from_wc copies @len bytes from @src to @dst using
  * non-temporal instructions where available. Note that all arguments
@@ -286,10 +315,14 @@ static void __memcpy_ntdqa(void *dst, const void *src, unsigned long len)
  */
 static void __drm_memcpy_from_wc(void *dst, const void *src, unsigned long len)
 {
-	if (unlikely(((unsigned long)dst | (unsigned long)src | len) & 15))
+	if (unlikely(((unsigned long)src | len) & 15)) {
 		memcpy(dst, src, len);
-	else if (likely(len))
-		__memcpy_ntdqa(dst, src, len >> 4);
+	} else if (likely(len)) {
+		if (IS_ALIGNED((unsigned long)dst, 16))
+			__memcpy_ntdqa(dst, src, len >> 4);
+		else
+			__memcpy_ntdqu(dst, src, len >> 4);
+	}
 }
 
 /**
@@ -326,6 +359,56 @@ void drm_memcpy_from_wc(struct iosys_map *dst,
 }
 EXPORT_SYMBOL(drm_memcpy_from_wc);
 
+/**
+ * drm_memcpy_from_wc_vaddr - Perform the fastest available memcpy from a source
+ * that may be WC to a destination in system memory.
+ * @dst: The destination pointer
+ * @src: The source pointer
+ * @src_offset: The offset from which to copy
+ * @len: The size of the area to transfer in bytes
+ *
+ * Same as drm_memcpy_from_wc except destination is accepted as system memory
+ * address. Useful in situations where passing destination address as iosys_map
+ * is simply an overhead and can be avoided.
+ */
+void drm_memcpy_from_wc_vaddr(void *dst, const struct iosys_map *src,
+			      size_t src_offset, unsigned long len)
+{
+	const void *src_addr = src->is_iomem ?
+				(void const __force *)src->vaddr_iomem :
+				src->vaddr;
+
+	if (WARN_ON(in_interrupt())) {
+		iosys_map_memcpy_from(dst, src, src_offset, len);
+		return;
+	}
+
+	if (static_branch_likely(&has_movntdqa)) {
+		__drm_memcpy_from_wc(dst, src_addr + src_offset, len);
+		return;
+	}
+
+	iosys_map_memcpy_from(dst, src, src_offset, len);
+}
+EXPORT_SYMBOL(drm_memcpy_from_wc_vaddr);
+
+/*
+ * drm_memcpy_fastcopy_supported - Returns if fast copy using non-temporal
+ * instructions is supported
+ *
+ * Returns true if platform has support for fast copying from wc memory type
+ * using non-temporal instructions. Else false.
+ */
+bool drm_memcpy_fastcopy_supported(void)
+{
+	if (static_branch_likely(&has_movntdqa))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(drm_memcpy_fastcopy_supported);
+
+
 /*
  * drm_memcpy_init_early - One time initialization of the WC memcpy code
  */
@@ -349,6 +432,19 @@ void drm_memcpy_from_wc(struct iosys_map *dst,
 	memcpy_fallback(dst, src, len);
 }
 EXPORT_SYMBOL(drm_memcpy_from_wc);
+
+bool drm_memcpy_fastcopy_supported(void)
+{
+	return false;
+}
+EXPORT_SYMBOL(drm_memcpy_fastcopy_supported);
+
+void drm_memcpy_from_wc_vaddr(void *dst, const struct iosys_map *src,
+			      size_t src_offset, unsigned long len)
+{
+	iosys_map_memcpy_from(dst, src, src_offset, len);
+}
+EXPORT_SYMBOL(drm_memcpy_from_wc_vaddr);
 
 void drm_memcpy_init_early(void)
 {

@@ -36,7 +36,6 @@
 
 #include "i915_cmd_parser.h"
 #include "i915_drv.h"
-#include "i915_memcpy.h"
 #include "i915_reg.h"
 
 /**
@@ -1180,12 +1179,11 @@ static u32 *copy_batch(struct drm_i915_gem_object *dst_obj,
 	}
 
 	src = ERR_PTR(-ENODEV);
-	if (src_needs_clflush && i915_has_memcpy_from_wc()) {
+	if (src_needs_clflush) {
 		src = i915_gem_object_pin_map(src_obj, I915_MAP_WC);
 		if (!IS_ERR(src)) {
-			i915_unaligned_memcpy_from_wc(dst,
-						      src + offset,
-						      length);
+			drm_memcpy_from_wc_vaddr(dst, src, offset,
+						 length);
 			i915_gem_object_unpin_map(src_obj);
 		}
 	}
@@ -1204,7 +1202,8 @@ static u32 *copy_batch(struct drm_i915_gem_object *dst_obj,
 		remain = length;
 		if (dst_needs_clflush & CLFLUSH_BEFORE)
 			remain = round_up(remain,
-					  boot_cpu_data.x86_clflush_size);
+					  //boot_cpu_data.x86_clflush_size);
+					  64);
 
 		ptr = dst;
 		x = offset_in_page(offset);

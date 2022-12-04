@@ -32,6 +32,8 @@
 #include "i915_params.h"
 #include "intel_memory_region.h"
 
+typedef unsigned long	pteval_t;
+
 #define I915_GFP_ALLOW_FAIL (GFP_KERNEL | __GFP_RETRY_MAYFAIL | __GFP_NOWARN)
 
 #if IS_ENABLED(CONFIG_DRM_I915_TRACE_GTT)
@@ -123,6 +125,12 @@ typedef u64 gen8_pte_t;
  */
 #define GEN8_3LVL_PDPES			4
 
+#define _PAGE_BIT_PWT			3 
+#define _PAGE_BIT_PCD			4	/* page cache disabled */
+#define _PAGE_BIT_PAT			7	/* on 4KB pages */
+#define _PAGE_PWT 			(_AT(pteval_t, 1) << _PAGE_BIT_PWT)
+#define _PAGE_PCD			(_AT(pteval_t, 1) << _PAGE_BIT_PCD)
+#define _PAGE_PAT			(_AT(pteval_t, 1) << _PAGE_BIT_PAT)
 #define PPAT_UNCACHED			(_PAGE_PWT | _PAGE_PCD)
 #define PPAT_CACHED_PDE			0 /* WB LLC */
 #define PPAT_CACHED			_PAGE_PAT /* WB LLCeLLC */

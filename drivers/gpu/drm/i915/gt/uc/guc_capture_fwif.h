@@ -21,7 +21,7 @@ struct file;
  */
 struct __guc_capture_bufstate {
 	u32 size;
-	void *data;
+	struct iosys_map *data_map;
 	u32 rd;
 	u32 wr;
 };

@@ -38,7 +38,6 @@
 #include "i915_gem_mman.h"
 #include "i915_gem_object.h"
 #include "i915_gem_ttm.h"
-#include "i915_memcpy.h"
 #include "i915_trace.h"
 
 static struct kmem_cache *slab_objects;
@@ -430,16 +429,15 @@ static void
 i915_gem_object_read_from_page_iomap(struct drm_i915_gem_object *obj, u64 offset, void *dst, int size)
 {
 	void __iomem *src_map;
-	void __iomem *src_ptr;
+	struct iosys_map src;
 	dma_addr_t dma = i915_gem_object_get_dma_address(obj, offset >> PAGE_SHIFT);
 
 	src_map = io_mapping_map_wc(&obj->mm.region->iomap,
 				    dma - obj->mm.region->region.start,
 				    PAGE_SIZE);
 
-	src_ptr = src_map + offset_in_page(offset);
-	if (!i915_memcpy_from_wc(dst, (void __force *)src_ptr, size))
-		memcpy_fromio(dst, src_ptr, size);
+	iosys_map_set_vaddr_iomem(&src, src_map);
+	drm_memcpy_from_wc_vaddr(dst, &src, offset_in_page(offset), size);
 
 	io_mapping_unmap(src_map);
 }

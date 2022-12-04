@@ -7,6 +7,7 @@
 #include <linux/sort.h>
 
 #include <drm/drm_buddy.h>
+#include <drm/drm_cache.h>
 
 #include "../i915_selftest.h"
 
@@ -24,7 +25,6 @@
 #include "gt/intel_engine_user.h"
 #include "gt/intel_gt.h"
 #include "gt/intel_migrate.h"
-#include "i915_memcpy.h"
 #include "i915_ttm_buddy_manager.h"
 #include "selftests/igt_flush_test.h"
 #include "selftests/i915_random.h"
@@ -1158,7 +1158,7 @@ static const char *repr_type(u32 type)
 
 static struct drm_i915_gem_object *
 create_region_for_mapping(struct intel_memory_region *mr, u64 size, u32 type,
-			  void **out_addr)
+			  struct iosys_map *out_addr)
 {
 	struct drm_i915_gem_object *obj;
 	void *addr;
@@ -1178,7 +1178,10 @@ create_region_for_mapping(struct intel_memory_region *mr, u64 size, u32 type,
 		return addr;
 	}
 
-	*out_addr = addr;
+	if (i915_gem_object_is_lmem(obj))
+		iosys_map_set_vaddr_iomem(out_addr, (void __iomem *)addr);
+	else
+		iosys_map_set_vaddr(out_addr, addr);
 	return obj;
 }
 
@@ -1189,24 +1192,33 @@ static int wrap_ktime_compare(const void *A, const void *B)
 	return ktime_compare(*a, *b);
 }
 
-static void igt_memcpy_long(void *dst, const void *src, size_t size)
+static void igt_memcpy_long(struct iosys_map *dst, struct iosys_map *src,
+			    size_t size)
 {
-	unsigned long *tmp = dst;
-	const unsigned long *s = src;
+	unsigned long *tmp = dst->is_iomem ?
+				(unsigned long __force *)dst->vaddr_iomem :
+				dst->vaddr;
+	const unsigned long *s = src->is_iomem ?
+				(unsigned long __force *)src->vaddr_iomem :
+				src->vaddr;
 
 	size = size / sizeof(unsigned long);
 	while (size--)
 		*tmp++ = *s++;
 }
 
-static inline void igt_memcpy(void *dst, const void *src, size_t size)
+static inline void igt_memcpy(struct iosys_map *dst, struct iosys_map *src,
+			      size_t size)
 {
-	memcpy(dst, src, size);
+	memcpy(dst->is_iomem ? (void __force *)dst->vaddr_iomem : dst->vaddr,
+	       src->is_iomem ? (void __force *)src->vaddr_iomem : src->vaddr,
+	       size);
 }
 
-static inline void igt_memcpy_from_wc(void *dst, const void *src, size_t size)
+static inline void igt_memcpy_from_wc(struct iosys_map *dst, struct iosys_map *src,
+				      size_t size)
 {
-	i915_memcpy_from_wc(dst, src, size);
+	drm_memcpy_from_wc(dst, src, size);
 }
 
 static int _perf_memcpy(struct intel_memory_region *src_mr,
@@ -1216,7 +1228,8 @@ static int _perf_memcpy(struct intel_memory_region *src_mr,
 	struct drm_i915_private *i915 = src_mr->i915;
 	const struct {
 		const char *name;
-		void (*copy)(void *dst, const void *src, size_t size);
+		void (*copy)(struct iosys_map *dst, struct iosys_map *src,
+			     size_t size);
 		bool skip;
 	} tests[] = {
 		{
@@ -1230,11 +1243,11 @@ static int _perf_memcpy(struct intel_memory_region *src_mr,
 		{
 			"memcpy_from_wc",
 			igt_memcpy_from_wc,
-			!i915_has_memcpy_from_wc(),
+			!drm_memcpy_fastcopy_supported(),
 		},
 	};
 	struct drm_i915_gem_object *src, *dst;
-	void *src_addr, *dst_addr;
+	struct iosys_map src_addr, dst_addr;
 	int ret = 0;
 	int i;
 
@@ -1262,7 +1275,7 @@ static int _perf_memcpy(struct intel_memory_region *src_mr,
 
 			t0 = ktime_get();
 
-			tests[i].copy(dst_addr, src_addr, size);
+			tests[i].copy(&dst_addr, &src_addr, size);
 
 			t1 = ktime_get();
 			t[pass] = ktime_sub(t1, t0);

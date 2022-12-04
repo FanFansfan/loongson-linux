@@ -59,3 +59,6 @@ void __init memblock_init(void)
 	memblock_reserve(__pa_symbol(&_text),
 			 __pa_symbol(&_end) - __pa_symbol(&_text));
 }
+
+struct resource intel_graphics_stolen_res __ro_after_init = DEFINE_RES_MEM(0, 0);
+EXPORT_SYMBOL(intel_graphics_stolen_res);

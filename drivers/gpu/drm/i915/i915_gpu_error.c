@@ -54,7 +54,6 @@
 #include "i915_driver.h"
 #include "i915_drv.h"
 #include "i915_gpu_error.h"
-#include "i915_memcpy.h"
 #include "i915_scatterlist.h"
 #include "i915_utils.h"
 
@@ -263,9 +262,12 @@ static bool compress_init(struct i915_vma_compress *c)
 		return false;
 	}
 
-	c->tmp = NULL;
-	if (i915_has_memcpy_from_wc())
-		c->tmp = pool_alloc(&c->pool, ALLOW_FAIL);
+	c->tmp = pool_alloc(&c->pool, ALLOW_FAIL);
+	if (!c->tmp) {
+		kfree(zstream->workspace);
+		pool_fini(&c->pool);
+		return false;
+	}
 
 	return true;
 }
@@ -297,15 +299,17 @@ static void *compress_next_page(struct i915_vma_compress *c,
 }
 
 static int compress_page(struct i915_vma_compress *c,
-			 void *src,
-			 struct i915_vma_coredump *dst,
-			 bool wc)
+			 struct iosys_map *src,
+			 struct i915_vma_coredump *dst)
 {
 	struct z_stream_s *zstream = &c->zstream;
 
-	zstream->next_in = src;
-	if (wc && c->tmp && i915_memcpy_from_wc(c->tmp, src, PAGE_SIZE))
+	if (src->is_iomem) {
+		drm_memcpy_from_wc_vaddr(c->tmp, src, 0, PAGE_SIZE);
 		zstream->next_in = c->tmp;
+	} else {
+		zstream->next_in = src->vaddr;
+	}
 	zstream->avail_in = PAGE_SIZE;
 
 	do {
@@ -394,9 +398,8 @@ static bool compress_start(struct i915_vma_compress *c)
 }
 
 static int compress_page(struct i915_vma_compress *c,
-			 void *src,
-			 struct i915_vma_coredump *dst,
-			 bool wc)
+			 struct iosys_map *src,
+			 struct i915_vma_coredump *dst)
 {
 	void *ptr;
 
@@ -404,8 +407,7 @@ static int compress_page(struct i915_vma_compress *c,
 	if (!ptr)
 		return -ENOMEM;
 
-	if (!(wc && i915_memcpy_from_wc(ptr, src, PAGE_SIZE)))
-		memcpy(ptr, src, PAGE_SIZE);
+	drm_memcpy_from_wc_vaddr(ptr, src, 0, PAGE_SIZE);
 	list_add_tail(&virt_to_page(ptr)->lru, &dst->page_list);
 	cond_resched();
 
@@ -1110,6 +1112,7 @@ i915_vma_coredump_create(const struct intel_gt *gt,
 	if (drm_mm_node_allocated(&ggtt->error_capture)) {
 		void __iomem *s;
 		dma_addr_t dma;
+		struct iosys_map src;
 
 		for_each_sgt_daddr(dma, iter, vma_res->bi.pages) {
 			mutex_lock(&ggtt->error_mutex);
@@ -1122,9 +1125,8 @@ i915_vma_coredump_create(const struct intel_gt *gt,
 			mb();
 
 			s = io_mapping_map_wc(&ggtt->iomap, slot, PAGE_SIZE);
-			ret = compress_page(compress,
-					    (void  __force *)s, dst,
-					    true);
+			iosys_map_set_vaddr_iomem(&src, s);
+			ret = compress_page(compress, &src, dst);
 			io_mapping_unmap(s);
 
 			mb();
@@ -1136,6 +1138,7 @@ i915_vma_coredump_create(const struct intel_gt *gt,
 	} else if (vma_res->bi.lmem) {
 		struct intel_memory_region *mem = vma_res->mr;
 		dma_addr_t dma;
+		struct iosys_map src;
 
 		for_each_sgt_daddr(dma, iter, vma_res->bi.pages) {
 			dma_addr_t offset = dma - mem->region.start;
@@ -1147,15 +1150,15 @@ i915_vma_coredump_create(const struct intel_gt *gt,
 			}
 
 			s = io_mapping_map_wc(&mem->iomap, offset, PAGE_SIZE);
-			ret = compress_page(compress,
-					    (void __force *)s, dst,
-					    true);
+			iosys_map_set_vaddr_iomem(&src, s);
+			ret = compress_page(compress, &src, dst);
 			io_mapping_unmap(s);
 			if (ret)
 				break;
 		}
 	} else {
 		struct page *page;
+		struct iosys_map src;
 
 		for_each_sgt_page(page, iter, vma_res->bi.pages) {
 			void *s;
@@ -1163,7 +1166,8 @@ i915_vma_coredump_create(const struct intel_gt *gt,
 			drm_clflush_pages(&page, 1);
 
 			s = kmap(page);
-			ret = compress_page(compress, s, dst, false);
+			iosys_map_set_vaddr(&src, s);
+			ret = compress_page(compress, &src, dst);
 			kunmap(page);
 
 			drm_clflush_pages(&page, 1);

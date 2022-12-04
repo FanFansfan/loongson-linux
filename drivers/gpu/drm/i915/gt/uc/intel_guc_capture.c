@@ -5,6 +5,7 @@
 
 #include <linux/types.h>
 
+#include <drm/drm_cache.h>
 #include <drm/drm_print.h>
 
 #include "gt/intel_engine_regs.h"
@@ -777,8 +778,7 @@ guc_capture_log_remove_dw(struct intel_guc *guc, struct __guc_capture_bufstate *
 	while (tries--) {
 		avail = guc_capture_buf_cnt_to_end(buf);
 		if (avail >= sizeof(u32)) {
-			src_data = (u32 *)(buf->data + buf->rd);
-			*dw = *src_data;
+			*dw = iosys_map_rd(buf->data_map, buf->rd, u32);
 			buf->rd += 4;
 			return 4;
 		}
@@ -795,7 +795,7 @@ guc_capture_data_extracted(struct __guc_capture_bufstate *b,
 			   int size, void *dest)
 {
 	if (guc_capture_buf_cnt_to_end(b) >= size) {
-		memcpy(dest, (b->data + b->rd), size);
+		drm_memcpy_from_wc_vaddr(dest, b->data_map, b->rd, size);
 		b->rd += size;
 		return true;
 	}
@@ -1287,23 +1287,24 @@ static void __guc_capture_process_output(struct intel_guc *guc)
 	struct intel_uc *uc = container_of(guc, typeof(*uc), guc);
 	struct drm_i915_private *i915 = guc_to_gt(guc)->i915;
 	struct guc_log_buffer_state log_buf_state_local;
-	struct guc_log_buffer_state *log_buf_state;
+	unsigned int capture_offset;
 	struct __guc_capture_bufstate buf;
-	void *src_data = NULL;
+	struct iosys_map src_map;
 	bool new_overflow;
 	int ret;
 
-	log_buf_state = guc->log.buf_addr +
-			(sizeof(struct guc_log_buffer_state) * GUC_CAPTURE_LOG_BUFFER);
-	src_data = guc->log.buf_addr +
-		   intel_guc_get_log_buffer_offset(&guc->log, GUC_CAPTURE_LOG_BUFFER);
+	src_map = IOSYS_MAP_INIT_OFFSET(&guc->log.buf_map,
+					intel_guc_get_log_buffer_offset(&guc->log, GUC_CAPTURE_LOG_BUFFER));
 
 	/*
 	 * Make a copy of the state structure, inside GuC log buffer
 	 * (which is uncached mapped), on the stack to avoid reading
 	 * from it multiple times.
 	 */
-	memcpy(&log_buf_state_local, log_buf_state, sizeof(struct guc_log_buffer_state));
+	capture_offset = sizeof(struct guc_log_buffer_state) * GUC_CAPTURE_LOG_BUFFER;
+	drm_memcpy_from_wc_vaddr(&log_buf_state_local, &guc->log.buf_map,
+				 capture_offset,
+				 sizeof(struct guc_log_buffer_state));
 	buffer_size = intel_guc_get_log_buffer_size(&guc->log, GUC_CAPTURE_LOG_BUFFER);
 	read_offset = log_buf_state_local.read_ptr;
 	write_offset = log_buf_state_local.sampled_write_ptr;
@@ -1330,7 +1331,7 @@ static void __guc_capture_process_output(struct intel_guc *guc)
 	buf.size = buffer_size;
 	buf.rd = read_offset;
 	buf.wr = write_offset;
-	buf.data = src_data;
+	buf.data_map = &src_map;
 
 	if (!uc->reset_in_progress) {
 		do {
@@ -1339,8 +1340,16 @@ static void __guc_capture_process_output(struct intel_guc *guc)
 	}
 
 	/* Update the state of log buffer err-cap state */
-	log_buf_state->read_ptr = write_offset;
-	log_buf_state->flush_to_file = 0;
+	iosys_map_wr_field(&guc->log.buf_map, capture_offset,
+			   struct guc_log_buffer_state, read_ptr, write_offset);
+	log_buf_state_local.flags = iosys_map_rd_field(&guc->log.buf_map,
+						       capture_offset,
+						       struct guc_log_buffer_state,
+						       flags);
+	log_buf_state_local.flush_to_file = 0;
+	iosys_map_wr_field(&guc->log.buf_map, capture_offset,
+			   struct guc_log_buffer_state, flags,
+			   log_buf_state_local.flags);
 	__guc_capture_flushlog_complete(guc);
 }
 

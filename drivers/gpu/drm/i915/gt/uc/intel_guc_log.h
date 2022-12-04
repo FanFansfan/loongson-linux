@@ -6,6 +6,7 @@
 #ifndef _INTEL_GUC_LOG_H_
 #define _INTEL_GUC_LOG_H_
 
+#include <linux/iosys-map.h>
 #include <linux/mutex.h>
 #include <linux/relay.h>
 #include <linux/workqueue.h>
@@ -53,7 +54,7 @@ struct intel_guc_log {
 
 	/* Combined buffer allocation */
 	struct i915_vma *vma;
-	void *buf_addr;
+	struct iosys_map buf_map;
 
 	/* RelayFS support */
 	struct {

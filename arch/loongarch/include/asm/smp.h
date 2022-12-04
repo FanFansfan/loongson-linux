@@ -11,6 +11,7 @@
 #include <linux/linkage.h>
 #include <linux/threads.h>
 #include <linux/cpumask.h>
+#include <asm/thread_info.h>
 
 extern int smp_num_siblings;
 extern int num_processors;

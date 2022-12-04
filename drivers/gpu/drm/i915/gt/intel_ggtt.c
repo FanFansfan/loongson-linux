@@ -3,7 +3,8 @@
  * Copyright © 2020 Intel Corporation
  */
 
-#include <asm/set_memory.h>
+//#include <asm/set_memory.h>
+#include <asm-generic/set_memory.h>
 #include <asm/smp.h>
 #include <linux/types.h>
 #include <linux/stop_machine.h>
@@ -1304,8 +1305,10 @@ void i915_ggtt_resume(struct i915_ggtt *ggtt)
 
 	ggtt->invalidate(ggtt);
 
-	if (flush)
-		wbinvd_on_all_cpus();
+	if (flush) {
+		//wbinvd_on_all_cpus();
+		wbflush();
+	}
 
 	if (GRAPHICS_VER(ggtt->vm.i915) >= 8)
 		setup_private_pat(ggtt->vm.gt->uncore);

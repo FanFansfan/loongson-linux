@@ -3,13 +3,13 @@
  * Copyright © 2014-2019 Intel Corporation
  */
 
+#include <drm/drm_cache.h>
 #include <linux/debugfs.h>
 #include <linux/string_helpers.h>
 
 #include "gt/intel_gt.h"
 #include "i915_drv.h"
 #include "i915_irq.h"
-#include "i915_memcpy.h"
 #include "intel_guc_capture.h"
 #include "intel_guc_log.h"
 
@@ -375,11 +375,13 @@ size_t intel_guc_get_log_buffer_offset(struct intel_guc_log *log,
 static void _guc_log_copy_debuglogs_for_relay(struct intel_guc_log *log)
 {
 	unsigned int buffer_size, read_offset, write_offset, bytes_to_copy, full_cnt;
-	struct guc_log_buffer_state *log_buf_state, *log_buf_snapshot_state;
+	struct guc_log_buffer_state *log_buf_snapshot_state;
 	struct guc_log_buffer_state log_buf_state_local;
 	enum guc_log_buffer_type type;
-	void *src_data, *dst_data;
+	void *dst_data;
 	bool new_overflow;
+	struct iosys_map src_data;
+	unsigned int type_offset;
 
 	mutex_lock(&log->relay.lock);
 
@@ -387,8 +389,7 @@ static void _guc_log_copy_debuglogs_for_relay(struct intel_guc_log *log)
 		goto out_unlock;
 
 	/* Get the pointer to shared GuC log buffer */
-	src_data = log->buf_addr;
-	log_buf_state = src_data;
+	src_data = log->buf_map;
 
 	/* Get the pointer to local buffer to store the logs */
 	log_buf_snapshot_state = dst_data = guc_get_write_buffer(log);
@@ -405,18 +406,21 @@ static void _guc_log_copy_debuglogs_for_relay(struct intel_guc_log *log)
 	}
 
 	/* Actual logs are present from the 2nd page */
-	src_data += PAGE_SIZE;
+	iosys_map_incr(&src_data, PAGE_SIZE);
 	dst_data += PAGE_SIZE;
 
 	/* For relay logging, we exclude error state capture */
-	for (type = GUC_DEBUG_LOG_BUFFER; type <= GUC_CRASH_DUMP_LOG_BUFFER; type++) {
+	for (type = GUC_DEBUG_LOG_BUFFER, type_offset = 0;
+	     type < GUC_CRASH_DUMP_LOG_BUFFER;
+	     type++, type_offset += sizeof(struct guc_log_buffer_state)) {
 		/*
 		 * Make a copy of the state structure, inside GuC log buffer
 		 * (which is uncached mapped), on the stack to avoid reading
 		 * from it multiple times.
 		 */
-		memcpy(&log_buf_state_local, log_buf_state,
-		       sizeof(struct guc_log_buffer_state));
+		iosys_map_memcpy_from(&log_buf_state_local, &log->buf_map,
+				      type_offset,
+				      sizeof(struct guc_log_buffer_state));
 		buffer_size = intel_guc_get_log_buffer_size(log, type);
 		read_offset = log_buf_state_local.read_ptr;
 		write_offset = log_buf_state_local.sampled_write_ptr;
@@ -427,9 +431,33 @@ static void _guc_log_copy_debuglogs_for_relay(struct intel_guc_log *log)
 		new_overflow = intel_guc_check_log_buf_overflow(log, type, full_cnt);
 
 		/* Update the state of shared log buffer */
-		log_buf_state->read_ptr = write_offset;
-		log_buf_state->flush_to_file = 0;
-		log_buf_state++;
+		iosys_map_wr_field(&log->buf_map, type_offset,
+				   struct guc_log_buffer_state, read_ptr,
+				   write_offset);
+		/* flush_to_file is a bitfield. iosys_map_wr_field cannot be used to
+		 * update bitfield member types. We make use of another member variable
+		 * `flags` which is a union of flush_to_file as following, to update
+		 * the flush_to_file bitfield.
+		 *
+		 * ====================================================================
+		 *	union {
+		 *		struct {
+		 *			u32 flush_to_file:1;
+		 *			u32 buffer_full_cnt:4;
+		 *			u32 reserved:27;
+		 *		};
+		 *		u32 flags;
+		 *	};
+		 * ====================================================================
+		 */
+		log_buf_state_local.flags = iosys_map_rd_field(&log->buf_map,
+							       type_offset,
+							       struct guc_log_buffer_state,
+							       flags);
+		log_buf_state_local.flush_to_file = 0;
+		iosys_map_wr_field(&log->buf_map, type_offset,
+				   struct guc_log_buffer_state, flags,
+				   log_buf_state_local.flags);
 
 		/* First copy the state structure in snapshot buffer */
 		memcpy(log_buf_snapshot_state, &log_buf_state_local,
@@ -459,15 +487,15 @@ static void _guc_log_copy_debuglogs_for_relay(struct intel_guc_log *log)
 
 		/* Just copy the newly written data */
 		if (read_offset > write_offset) {
-			i915_memcpy_from_wc(dst_data, src_data, write_offset);
+			drm_memcpy_from_wc_vaddr(dst_data, &src_data, 0,
+						 write_offset);
 			bytes_to_copy = buffer_size - read_offset;
 		} else {
 			bytes_to_copy = write_offset - read_offset;
 		}
-		i915_memcpy_from_wc(dst_data + read_offset,
-				    src_data + read_offset, bytes_to_copy);
-
-		src_data += buffer_size;
+		drm_memcpy_from_wc_vaddr(dst_data + read_offset, &src_data,
+					 read_offset, bytes_to_copy);
+		iosys_map_incr(&src_data, buffer_size);
 		dst_data += buffer_size;
 	}
 
@@ -489,7 +517,7 @@ static int guc_log_relay_map(struct intel_guc_log *log)
 {
 	lockdep_assert_held(&log->relay.lock);
 
-	if (!log->vma || !log->buf_addr)
+	if (!log->vma || !iosys_map_is_null(&log->buf_map))
 		return -ENODEV;
 
 	/*
@@ -638,7 +666,10 @@ int intel_guc_log_create(struct intel_guc_log *log)
 		i915_vma_unpin_and_release(&log->vma, 0);
 		goto err;
 	}
-	log->buf_addr = vaddr;
+	if (i915_gem_object_is_lmem(log->vma->obj))
+		iosys_map_set_vaddr_iomem(&log->buf_map, (void __iomem *)vaddr);
+	else
+		iosys_map_set_vaddr(&log->buf_map, vaddr);
 
 	log->level = __get_default_log_level(log);
 	DRM_DEBUG_DRIVER("guc_log_level=%d (%s, verbose:%s, verbosity:%d)\n",
@@ -655,7 +686,7 @@ err:
 
 void intel_guc_log_destroy(struct intel_guc_log *log)
 {
-	log->buf_addr = NULL;
+	iosys_map_clear(&log->buf_map);
 	i915_vma_unpin_and_release(&log->vma, I915_VMA_RELEASE_MAP);
 }
 
@@ -701,7 +732,7 @@ out_unlock:
 
 bool intel_guc_log_relay_created(const struct intel_guc_log *log)
 {
-	return log->buf_addr;
+	return !iosys_map_is_null(&log->buf_map);
 }
 
 int intel_guc_log_relay_open(struct intel_guc_log *log)
@@ -715,16 +746,6 @@ int intel_guc_log_relay_open(struct intel_guc_log *log)
 
 	if (intel_guc_log_relay_created(log)) {
 		ret = -EEXIST;
-		goto out_unlock;
-	}
-
-	/*
-	 * We require SSE 4.1 for fast reads from the GuC log buffer and
-	 * it should be present on the chipsets supporting GuC based
-	 * submissions.
-	 */
-	if (!i915_has_memcpy_from_wc()) {
-		ret = -ENXIO;
 		goto out_unlock;
 	}
 
@@ -912,8 +933,7 @@ int intel_guc_log_dump(struct intel_guc_log *log, struct drm_printer *p,
 	}
 
 	for (i = 0; i < obj->base.size; i += PAGE_SIZE) {
-		if (!i915_memcpy_from_wc(page, map + i, PAGE_SIZE))
-			memcpy(page, map + i, PAGE_SIZE);
+		memcpy(page, map + i, PAGE_SIZE);
 
 		for (j = 0; j < PAGE_SIZE / sizeof(u32); j += 4)
 			drm_printf(p, "0x%08x 0x%08x 0x%08x 0x%08x\n",
