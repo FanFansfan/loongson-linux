@@ -39,6 +39,43 @@
 /* A small bounce buffer that fits on the stack. */
 #define MEMCPY_BOUNCE_SIZE 128
 
+#if defined(CONFIG_LOONGARCH)
+extern void flush_cache_all_on_all_cpus(void);
+#endif
+#if defined(CONFIG_LOONGARCH_1)
+#include <asm/cacheflush.h>
+static void
+drm_clflush_page(struct page *page)
+{
+	uint8_t *page_virtual;
+	unsigned int i;
+	const int size = 64;
+
+	if (unlikely(page == NULL))
+		return;
+
+	page_virtual = kmap_atomic(page);
+	for (i = 0; i < PAGE_SIZE; i += size)
+	{
+		flush_dcache_line(page_virtual + i);
+		flush_vcache_line(page_virtual + i);
+		flush_scache_line(page_virtual + i);
+	}
+	kunmap_atomic(page_virtual);
+}
+
+static void drm_cache_flush_clflush(struct page *pages[],
+				    unsigned long num_pages)
+{
+	unsigned long i;
+
+	mb(); /*Full memory barrier used before so that CLFLUSH is ordered*/
+	for (i = 0; i < num_pages; i++)
+		drm_clflush_page(*pages++);
+	mb(); /*Also used after CLFLUSH so that all cache is flushed*/
+}
+#endif
+
 #if defined(CONFIG_X86)
 #include <asm/smp.h>
 
@@ -95,6 +132,10 @@ drm_clflush_pages(struct page *pages[], unsigned long num_pages)
 
 	if (wbinvd_on_all_cpus())
 		pr_err("Timed out waiting for cache flush\n");
+#elif defined(CONFIG_LOONGARCH)
+
+	//drm_cache_flush_clflush(pages, num_pages);
+	flush_cache_all_on_all_cpus();
 
 #elif defined(__powerpc__)
 	unsigned long i;
@@ -141,6 +182,14 @@ drm_clflush_sg(struct sg_table *st)
 
 	if (wbinvd_on_all_cpus())
 		pr_err("Timed out waiting for cache flush\n");
+#elif defined(CONFIG_LOONGARCH)
+	flush_cache_all_on_all_cpus();
+	//struct sg_page_iter sg_iter;
+
+	//mb(); /*CLFLUSH is ordered only by using memory barriers*/
+	//for_each_sgtable_page(st, &sg_iter, 0)
+	//	drm_clflush_page(sg_page_iter_page(&sg_iter));
+	//mb(); /*Make sure that all cache line entry is flushed*/
 #else
 	WARN_ONCE(1, "Architecture has no drm_cache.c support\n");
 #endif
@@ -174,6 +223,23 @@ drm_clflush_virt_range(void *addr, unsigned long length)
 
 	if (wbinvd_on_all_cpus())
 		pr_err("Timed out waiting for cache flush\n");
+#elif defined(CONFIG_LOONGARCH)
+	//const int size = 64;
+	//void *end = addr + length;
+
+	//addr = (void *)(((unsigned long)addr) & -size);
+	//mb(); /*CLFLUSH is only ordered with a full memory barrier*/
+	//for (; addr < end; addr += size)
+	//{
+	//	flush_dcache_line(addr);
+	//	flush_vcache_line(addr);
+	//	flush_scache_line(addr);
+	//}
+	//flush_dcache_line(end - 1);
+	//flush_vcache_line(end - 1);
+	//flush_scache_line(end - 1);
+	//mb(); /*Ensure that every data cache line entry is flushed*/
+	flush_cache_all_on_all_cpus();
 #else
 	WARN_ONCE(1, "Architecture has no drm_cache.c support\n");
 #endif

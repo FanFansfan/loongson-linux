@@ -15,6 +15,7 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/syscalls.h>
+#include <linux/smp.h>
 
 #include <asm/bootinfo.h>
 #include <asm/cacheflush.h>
@@ -78,6 +79,17 @@ asmlinkage __visible void __flush_cache_all(void)
 	for (leaf = 0; leaf < cache_present; leaf++)
 		flush_cache_leaf(leaf);
 }
+
+static void __flush_cache_all_on_this_cpu(void *)
+{
+	__flush_cache_all();
+}
+
+void flush_cache_all_on_all_cpus(void)
+{
+	on_each_cpu(__flush_cache_all_on_this_cpu, NULL, 1);
+}
+EXPORT_SYMBOL(flush_cache_all_on_all_cpus);
 
 #define L1IUPRE		(1 << 0)
 #define L1IUUNIFY	(1 << 1)

@@ -20,6 +20,8 @@ MODULE_IMPORT_NS(DMA_BUF);
 
 I915_SELFTEST_DECLARE(static bool force_different_devices;)
 
+extern void flush_cache_all_on_all_cpus(void);
+
 static struct drm_i915_gem_object *dma_buf_to_obj(struct dma_buf *buf)
 {
 	return to_intel_bo(buf->priv);
@@ -259,8 +261,7 @@ static int i915_gem_object_get_pages_dmabuf(struct drm_i915_gem_object *obj)
 	 */
 	if (i915_gem_object_can_bypass_llc(obj) ||
 	    (!HAS_LLC(i915) && !IS_DG1(i915)))
-		wbflush();
-		//wbinvd_on_all_cpus();
+		flush_cache_all_on_all_cpus();
 
 	sg_page_sizes = i915_sg_dma_sizes(pages->sgl);
 	__i915_gem_object_set_pages(obj, pages, sg_page_sizes);

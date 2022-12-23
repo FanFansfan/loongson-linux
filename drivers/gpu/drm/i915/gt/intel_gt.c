@@ -649,7 +649,7 @@ int intel_gt_init(struct intel_gt *gt)
 	intel_uncore_forcewake_get(gt->uncore, FORCEWAKE_ALL);
 
 	err = intel_gt_init_scratch(gt,
-				    GRAPHICS_VER(gt->i915) == 2 ? SZ_256K : SZ_4K);
+				    GRAPHICS_VER(gt->i915) == 2 ? SZ_256K : SZ_64K);
 	if (err)
 		goto out_fw;
 

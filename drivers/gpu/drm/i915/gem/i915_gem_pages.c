@@ -329,6 +329,8 @@ static void *i915_gem_object_map_pfn(struct drm_i915_gem_object *obj,
 	resource_size_t iomap = obj->mm.region->iomap.base -
 		obj->mm.region->region.start;
 	unsigned long n_pfn = obj->base.size >> PAGE_SHIFT;
+	dump_stack();
+	drm_dbg(obj->base.dev, "obj->base.size: %ld, pfn: %ld, page shift: %d\n", obj->base.size, n_pfn, PAGE_SHIFT);
 	unsigned long stack[32], *pfns = stack, i;
 	struct sgt_iter iter;
 	dma_addr_t addr;
@@ -348,6 +350,7 @@ static void *i915_gem_object_map_pfn(struct drm_i915_gem_object *obj,
 		pfns[i++] = (iomap + addr) >> PAGE_SHIFT;
 	//vaddr = vmap_pfn(pfns, n_pfn, pgprot_writecombine(PAGE_KERNEL_IO));
 	vaddr = vmap_pfn(pfns, n_pfn, pgprot_writecombine(PAGE_KERNEL));
+	drm_dbg(obj->base.dev, "obj->base.size: %ld, pfn: %ld, page shift: %d\n", obj->base.size, n_pfn, PAGE_SHIFT);
 	if (pfns != stack)
 		kvfree(pfns);
 
@@ -358,6 +361,7 @@ static void *i915_gem_object_map_pfn(struct drm_i915_gem_object *obj,
 void *i915_gem_object_pin_map(struct drm_i915_gem_object *obj,
 			      enum i915_map_type type)
 {
+	drm_dbg(obj->base.dev, "%ps", __builtin_return_address(0));
 	enum i915_map_type has_type;
 	bool pinned;
 	void *ptr;
@@ -460,6 +464,7 @@ err_unpin:
 void *i915_gem_object_pin_map_unlocked(struct drm_i915_gem_object *obj,
 				       enum i915_map_type type)
 {
+	drm_dbg(obj->base.dev, "%ps", __builtin_return_address(0));
 	void *ret;
 
 	i915_gem_object_lock(obj, NULL);

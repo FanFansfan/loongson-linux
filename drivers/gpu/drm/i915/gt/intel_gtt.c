@@ -19,6 +19,8 @@
 #include "intel_gtt.h"
 
 
+extern bool pr_flush(int timeout_ms, bool reset_on_progress);
+
 static bool intel_ggtt_update_needs_vtd_wa(struct drm_i915_private *i915)
 {
 	return IS_BROXTON(i915) && i915_vtd_active(i915);
@@ -345,6 +347,9 @@ int setup_scratch_page(struct i915_address_space *vm)
 	if (i915_vm_is_4lvl(vm) &&
 	    HAS_PAGE_SIZES(vm->i915, I915_GTT_PAGE_SIZE_64K))
 		size = I915_GTT_PAGE_SIZE_64K;
+	
+	size = I915_GTT_PAGE_SIZE_64K;
+	drm_dbg(&vm->i915->drm, "gtt page size %ld\n", size);
 
 	do {
 		struct drm_i915_gem_object *obj;

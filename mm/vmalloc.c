@@ -2876,6 +2876,8 @@ static int vmap_pfn_apply(pte_t *pte, unsigned long addr, void *private)
 {
 	struct vmap_pfn_data *data = private;
 
+	printk("vmap_pfn_apply, data->idx: %d\n", data->idx);
+
 	if (WARN_ON_ONCE(pfn_valid(data->pfns[data->idx])))
 		return -EINVAL;
 	*pte = pte_mkspecial(pfn_pte(data->pfns[data->idx++], data->prot));
@@ -2895,6 +2897,8 @@ void *vmap_pfn(unsigned long *pfns, unsigned int count, pgprot_t prot)
 {
 	struct vmap_pfn_data data = { .pfns = pfns, .prot = pgprot_nx(prot) };
 	struct vm_struct *area;
+
+	printk("vmap_pfn, data->idx %d\n, count * PAGE_SIZE == %d", count * PAGE_SIZE, data.idx);
 
 	area = get_vm_area_caller(count * PAGE_SIZE, VM_IOREMAP,
 			__builtin_return_address(0));

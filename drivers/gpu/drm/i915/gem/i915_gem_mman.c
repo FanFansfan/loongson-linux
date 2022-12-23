@@ -77,7 +77,7 @@ i915_gem_mmap_ioctl(struct drm_device *dev, void *data,
 		return -EINVAL;
 
 	//if (args->flags & I915_MMAP_WC && !pat_enabled())
-	if (true)
+	if (false)
 		return -ENODEV;
 
 	obj = i915_gem_object_lookup(file, args->handle);

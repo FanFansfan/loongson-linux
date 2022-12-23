@@ -2293,7 +2293,7 @@ asmlinkage __visible int _printk(const char *fmt, ...)
 }
 EXPORT_SYMBOL(_printk);
 
-static bool pr_flush(int timeout_ms, bool reset_on_progress);
+bool pr_flush(int timeout_ms, bool reset_on_progress);
 static bool __pr_flush(struct console *con, int timeout_ms, bool reset_on_progress);
 
 #else /* CONFIG_PRINTK */
@@ -2328,7 +2328,9 @@ static void call_console_driver(struct console *con, const char *text, size_t le
 {
 }
 static bool suppress_message_printing(int level) { return false; }
-static bool pr_flush(int timeout_ms, bool reset_on_progress) { return true; }
+bool pr_flush(int timeout_ms, bool reset_on_progress) { return true; }
+EXPORT_SYMBOL(pr_flush);
+
 static bool __pr_flush(struct console *con, int timeout_ms, bool reset_on_progress) { return true; }
 
 #endif /* CONFIG_PRINTK */
@@ -3428,10 +3430,12 @@ static bool __pr_flush(struct console *con, int timeout_ms, bool reset_on_progre
  * Context: Process context. May sleep while acquiring console lock.
  * Return: true if all enabled printers are caught up.
  */
-static bool pr_flush(int timeout_ms, bool reset_on_progress)
+bool pr_flush(int timeout_ms, bool reset_on_progress)
 {
 	return __pr_flush(NULL, timeout_ms, reset_on_progress);
 }
+
+EXPORT_SYMBOL(pr_flush);
 
 /*
  * Delayed printk version, for scheduler-internal messages:

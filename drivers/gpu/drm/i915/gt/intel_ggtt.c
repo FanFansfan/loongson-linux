@@ -27,6 +27,10 @@
 #include "intel_gtt.h"
 #include "gen8_ppgtt.h"
 
+
+extern bool pr_flush(int timeout_ms, bool reset_on_progress);
+extern void flush_cache_all_on_all_cpus(void);
+
 static inline bool suspend_retains_ptes(struct i915_address_space *vm)
 {
 	return GRAPHICS_VER(vm->i915) >= 8 &&
@@ -1151,6 +1155,8 @@ static int ggtt_probe_hw(struct i915_ggtt *ggtt, struct intel_gt *gt)
 	ggtt->vm.dma = i915->drm.dev;
 	dma_resv_init(&ggtt->vm._resv);
 
+	drm_dbg(&i915->drm, "ggtt_probe_hw\n");
+
 	if (GRAPHICS_VER(i915) >= 8)
 		ret = gen8_gmch_probe(ggtt);
 	else if (GRAPHICS_VER(i915) >= 6)
@@ -1306,8 +1312,7 @@ void i915_ggtt_resume(struct i915_ggtt *ggtt)
 	ggtt->invalidate(ggtt);
 
 	if (flush) {
-		//wbinvd_on_all_cpus();
-		wbflush();
+		flush_cache_all_on_all_cpus();
 	}
 
 	if (GRAPHICS_VER(ggtt->vm.i915) >= 8)
