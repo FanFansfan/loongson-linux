@@ -17,7 +17,7 @@
 #define   HEAD_ADDR				0x001FFFFC
 #define RING_START(base)			_MMIO((base) + 0x38)
 #define RING_CTL(base)				_MMIO((base) + 0x3c)
-#define   RING_CTL_SIZE(size)			((size) - PAGE_SIZE) /* in bytes -> pages */
+#define   RING_CTL_SIZE(size)			((size) - GEN8_PAGE_SIZE) /* in bytes -> pages */
 #define   RING_NR_PAGES				0x001FF000
 #define   RING_REPORT_MASK			0x00000006
 #define   RING_REPORT_64K			0x00000002

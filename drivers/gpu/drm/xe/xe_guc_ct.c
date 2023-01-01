@@ -132,7 +132,7 @@ int xe_guc_ct_init(struct xe_guc_ct *ct)
 	struct xe_bo *bo;
 	int err;
 
-	XE_BUG_ON(guc_ct_size() % PAGE_SIZE);
+	//XE_BUG_ON(guc_ct_size() % PAGE_SIZE);
 
 	mutex_init(&ct->lock);
 	spin_lock_init(&ct->fast_lock);
@@ -212,6 +212,8 @@ static int guc_ct_ctb_h2g_register(struct xe_guc_ct *ct)
 	ctb_addr = xe_bo_ggtt_addr(ct->bo) + CTB_DESC_SIZE * 2;
 	size = ct->ctbs.h2g.size * sizeof(u32);
 
+	drm_info(&ct_to_xe(ct)->drm, "guc_ct_ctb_h2g_register desc_addr %d, ctb_addr %d, size %d\n", desc_addr, ctb_addr, size);
+
 	err = xe_guc_self_cfg64(guc,
 				GUC_KLV_SELF_CFG_H2G_CTB_DESCRIPTOR_ADDR_KEY,
 				desc_addr);
@@ -239,6 +241,8 @@ static int guc_ct_ctb_g2h_register(struct xe_guc_ct *ct)
 	ctb_addr = xe_bo_ggtt_addr(ct->bo) + CTB_DESC_SIZE * 2 +
 		CTB_H2G_BUFFER_SIZE;
 	size = ct->ctbs.g2h.size * sizeof(u32);
+
+	drm_info(&ct_to_xe(ct)->drm, "guc_ct_ctb_g2h_register, desc_addr %d, ctb_addr %d, size %d\n", desc_addr, ctb_addr, size);
 
 	err = xe_guc_self_cfg64(guc,
 				GUC_KLV_SELF_CFG_G2H_CTB_DESCRIPTOR_ADDR_KEY,

@@ -677,6 +677,8 @@ int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 	if (vm)
 		xe_lrc_set_ppgtt(lrc, vm);
 
+	drm_info(&xe->drm, "xe_lrc_init RING_CTL_SIZE %d, lrc->ring.size %d, CTX_RING_START %d\n", RING_CTL_SIZE(lrc->ring.size), lrc->ring.size, __xe_lrc_ring_ggtt_addr(lrc));
+
 	xe_lrc_write_ctx_reg(lrc, CTX_RING_START, __xe_lrc_ring_ggtt_addr(lrc));
 	xe_lrc_write_ctx_reg(lrc, CTX_RING_HEAD, 0);
 	xe_lrc_write_ctx_reg(lrc, CTX_RING_TAIL, lrc->ring.tail);

@@ -114,7 +114,7 @@ static int xe_migrate_create_cleared_bo(struct xe_migrate *m, struct xe_vm *vm)
 		return PTR_ERR(m->cleared_bo);
 
 	xe_map_memset(xe, &m->cleared_bo->vmap, 0, 0x00, cleared_size);
-	vram_addr = xe_bo_addr(m->cleared_bo, 0, GEN8_PAGE_SIZE, &is_vram);
+	vram_addr = xe_bo_addr(m->cleared_bo, 0, PAGE_SIZE, &is_vram);
 	XE_BUG_ON(!is_vram);
 	m->cleared_vram_ofs = xe_migrate_vram_ofs(vram_addr);
 
@@ -191,13 +191,13 @@ static int xe_migrate_prepare_vm(struct xe_gt *gt, struct xe_migrate *m,
 		}
 	} else {
 		bool is_lmem;
-		u64 batch_addr = xe_bo_addr(batch, 0, GEN8_PAGE_SIZE, &is_lmem);
+		u64 batch_addr = xe_bo_addr(batch, 0, PAGE_SIZE, &is_lmem);
 
 		m->batch_base_ofs = xe_migrate_vram_ofs(batch_addr);
 
 		if (xe->info.supports_usm) {
 			batch = gt->usm.bb_pool.bo;
-			batch_addr = xe_bo_addr(batch, 0, GEN8_PAGE_SIZE,
+			batch_addr = xe_bo_addr(batch, 0, PAGE_SIZE,
 						&is_lmem);
 			m->usm_batch_base_ofs = xe_migrate_vram_ofs(batch_addr);
 		}
@@ -870,7 +870,7 @@ static void write_pgtable(struct xe_gt *gt, struct xe_bb *bb, u64 ppgtt_ofs,
 		bool is_lmem;
 
 		ppgtt_ofs = xe_migrate_vram_ofs(xe_bo_addr(update->pt_bo, 0,
-							   GEN8_PAGE_SIZE,
+							   PAGE_SIZE,
 							   &is_lmem));
 		XE_BUG_ON(!is_lmem);
 	}

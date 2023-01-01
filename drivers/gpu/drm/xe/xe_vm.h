@@ -131,7 +131,7 @@ void xe_vm_fence_all_extobjs(struct xe_vm *vm, struct dma_fence *fence,
 int xe_analyze_vm(struct drm_printer *p, struct xe_vm *vm, int gt_id);
 
 #if IS_ENABLED(CONFIG_DRM_XE_DEBUG_VM)
-#define vm_dbg drm_dbg
+#define vm_dbg drm_info
 #else
 __printf(2, 3)
 static inline void vm_dbg(const struct drm_device *dev,

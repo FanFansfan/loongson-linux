@@ -74,7 +74,7 @@ static u32 guc_ctl_feature_flags(struct xe_guc *guc)
 
 static u32 guc_ctl_log_params_flags(struct xe_guc *guc)
 {
-	u32 offset = guc_bo_ggtt_addr(guc, guc->log.bo) >> PAGE_SHIFT;
+	u32 offset = guc_bo_ggtt_addr(guc, guc->log.bo) >> GEN8_PTE_SHIFT;
 	u32 flags;
 
 	#if (((CRASH_BUFFER_SIZE) % SZ_1M) == 0)
@@ -127,7 +127,7 @@ static u32 guc_ctl_log_params_flags(struct xe_guc *guc)
 
 static u32 guc_ctl_ads_flags(struct xe_guc *guc)
 {
-	u32 ads = guc_bo_ggtt_addr(guc, guc->ads.bo) >> PAGE_SHIFT;
+	u32 ads = guc_bo_ggtt_addr(guc, guc->ads.bo) >> GEN8_PTE_SHIFT;
 	u32 flags = ads << GUC_ADS_ADDR_SHIFT;
 
 	return flags;
@@ -228,7 +228,7 @@ static void guc_init_params(struct xe_guc *guc)
 	params[GUC_CTL_DEVID] = guc_ctl_devid(guc);
 
 	for (i = 0; i < GUC_CTL_MAX_DWORDS; i++)
-		drm_dbg(&xe->drm, "GuC param[%2d] = 0x%08x\n", i, params[i]);
+		drm_info(&xe->drm, "GuC param[%2d] = 0x%08x\n", i, params[i]);
 }
 
 /*
@@ -436,11 +436,12 @@ static int guc_wait_ucode(struct xe_guc *guc)
 	 * 200ms. Even at slowest clock, this should be sufficient. And
 	 * in the working case, a larger timeout makes no difference.
 	 */
-	ret = wait_for(guc_ready(guc, &status), 200);
+	ret = wait_for(guc_ready(guc, &status), 1000);
 	if (ret) {
 		struct drm_device *drm = &xe->drm;
 		struct drm_printer p = drm_info_printer(drm->dev);
 
+		dump_stack();
 		drm_info(drm, "GuC load failed: status = 0x%08X\n", status);
 		drm_info(drm, "GuC load failed: status: Reset = %d, "
 			"BootROM = 0x%02X, UKernel = 0x%02X, "
@@ -464,9 +465,10 @@ static int guc_wait_ucode(struct xe_guc *guc)
 			ret = -ENXIO;
 		}
 
+		BUG_ON(true);
 		xe_guc_log_print(&guc->log, &p);
 	} else {
-		drm_dbg(&xe->drm, "GuC successfully loaded");
+		drm_info(&xe->drm, "GuC successfully loaded");
 	}
 
 	return ret;

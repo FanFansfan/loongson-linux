@@ -29,7 +29,7 @@ u64 xe_ggtt_pte_encode(struct xe_bo *bo, u64 bo_offset)
 	u64 pte;
 	bool is_lmem;
 
-	pte = xe_bo_addr(bo, bo_offset, GEN8_PAGE_SIZE, &is_lmem);
+	pte = xe_bo_addr(bo, bo_offset, PAGE_SIZE, &is_lmem);
 	pte |= GEN8_PAGE_PRESENT;
 
 	if (is_lmem)
@@ -103,11 +103,16 @@ int xe_ggtt_init(struct xe_gt *gt, struct xe_ggtt *ggtt)
 		return -ENOMEM;
 	}
 
+	drm_info(&xe->drm, "Preallocated GSM: %d\n", gsm_size);
+
 	ggtt->gsm = gt->mmio.regs + SZ_8M;
 	ggtt->scratch = xe_bo_create_locked(xe, gt, NULL, GEN8_PAGE_SIZE,
 					    ttm_bo_type_kernel,
 					    XE_BO_CREATE_VRAM_IF_DGFX(gt) |
 					    XE_BO_CREATE_PINNED_BIT);
+	drm_info(&xe->drm, "scratch base %ld, size %ld\n",
+		ggtt->scratch->ttm.resource->start,
+		ggtt->scratch->ttm.resource->size);
 	if (IS_ERR(ggtt->scratch)) {
 		err = PTR_ERR(ggtt->scratch);
 		goto err_iomap;

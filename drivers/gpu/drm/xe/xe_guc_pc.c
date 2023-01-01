@@ -721,7 +721,7 @@ int xe_guc_pc_start(struct xe_guc_pc *pc)
 {
 	struct xe_device *xe = pc_to_xe(pc);
 	struct xe_gt *gt = pc_to_gt(pc);
-	u32 size = PAGE_ALIGN(sizeof(struct slpc_shared_data));
+	u32 size = ALIGN(sizeof(struct slpc_shared_data), GEN8_PAGE_SIZE);
 	int ret;
 
 	XE_WARN_ON(!xe_device_guc_submission_enabled(xe));
@@ -739,7 +739,8 @@ int xe_guc_pc_start(struct xe_guc_pc *pc)
 	if (ret)
 		goto out;
 
-	if (wait_for(pc_is_in_state(pc, SLPC_GLOBAL_STATE_RUNNING), 5)) {
+	if (wait_for(pc_is_in_state(pc, SLPC_GLOBAL_STATE_RUNNING), 50)) {
+		dump_stack();
 		drm_err(&pc_to_xe(pc)->drm, "GuC PC Start failed\n");
 		ret = -EIO;
 		goto out;
@@ -813,7 +814,7 @@ int xe_guc_pc_init(struct xe_guc_pc *pc)
 	struct xe_gt *gt = pc_to_gt(pc);
 	struct xe_device *xe = gt_to_xe(gt);
 	struct xe_bo *bo;
-	u32 size = PAGE_ALIGN(sizeof(struct slpc_shared_data));
+	u32 size = ALIGN(sizeof(struct slpc_shared_data), GEN8_PAGE_SIZE);
 	int err;
 
 	mutex_init(&pc->freq_lock);

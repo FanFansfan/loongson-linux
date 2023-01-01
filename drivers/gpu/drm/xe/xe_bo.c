@@ -284,6 +284,7 @@ static struct ttm_tt *xe_ttm_tt_create(struct ttm_buffer_object *ttm_bo,
 							   bo->ttm.base.size),
 				       PAGE_SIZE));
 	if (err) {
+		drm_info(&xe->drm, "xe ttm tt create: ttm tt init error\n");
 		kfree(tt);
 		return NULL;
 	}
@@ -936,6 +937,8 @@ struct xe_bo *__xe_bo_create_locked(struct xe_device *xe, struct xe_bo *bo,
 			return bo;
 	}
 
+	drm_info(&xe->drm, "Create VRAM Flags %ld\n", flags & (XE_BO_CREATE_VRAM0_BIT | XE_BO_CREATE_VRAM1_BIT));
+
 	if (flags & (XE_BO_CREATE_VRAM0_BIT | XE_BO_CREATE_VRAM1_BIT) &&
 	    !(flags & XE_BO_CREATE_IGNORE_MIN_PAGE_SIZE_BIT) &&
 	    xe->info.vram_flags & XE_VRAM_FLAGS_NEED64K) {
@@ -943,7 +946,8 @@ struct xe_bo *__xe_bo_create_locked(struct xe_device *xe, struct xe_bo *bo,
 		flags |= XE_BO_INTERNAL_64K;
 		alignment = SZ_64K >> PAGE_SHIFT;
 	} else {
-		alignment = SZ_4K >> PAGE_SHIFT;
+		alignment = PAGE_SIZE >> PAGE_SHIFT;
+		size = ALIGN(size, PAGE_SIZE);
 	}
 
 	bo->gt = gt;
@@ -975,8 +979,10 @@ struct xe_bo *__xe_bo_create_locked(struct xe_device *xe, struct xe_bo *bo,
 	err = ttm_bo_init_reserved(&xe->ttm, &bo->ttm, type,
 				   placement, alignment,
 				   &ctx, NULL, resv, xe_ttm_bo_destroy);
-	if (err)
+	if (err) {
+		drm_info(&xe->drm, "ttm bo init reserved err\n");
 		return ERR_PTR(err);
+	}
 
 	bo->created = true;
 	ttm_bo_move_to_lru_tail_unlocked(&bo->ttm);
@@ -995,8 +1001,10 @@ struct xe_bo *xe_bo_create_locked(struct xe_device *xe, struct xe_gt *gt,
 		xe_vm_assert_held(vm);
 	bo = __xe_bo_create_locked(xe, NULL, gt, vm ? &vm->resv : NULL, size,
 				   type, flags);
-	if (IS_ERR(bo))
+	if (IS_ERR(bo)) {
+		drm_info(&xe->drm, "bo create locked error\n");
 		return bo;
+	}
 
 	if (vm && xe_bo_is_user(bo))
 		xe_vm_get(vm);

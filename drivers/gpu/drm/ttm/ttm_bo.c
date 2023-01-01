@@ -31,6 +31,8 @@
 
 #define pr_fmt(fmt) "[TTM] " fmt
 
+#include <drm/drm_device.h>
+
 #include <drm/ttm/ttm_bo.h>
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_tt.h>
@@ -973,6 +975,7 @@ int ttm_bo_init_reserved(struct ttm_device *bdev, struct ttm_buffer_object *bo,
 
 	ret = ttm_resource_alloc(bo, &sys_mem, &bo->resource);
 	if (unlikely(ret)) {
+		drm_info(bo->base.dev, "ttm resource alloc error\n");
 		ttm_bo_put(bo);
 		return ret;
 	}
@@ -984,8 +987,10 @@ int ttm_bo_init_reserved(struct ttm_device *bdev, struct ttm_buffer_object *bo,
 	if (bo->type == ttm_bo_type_device || bo->type == ttm_bo_type_sg) {
 		ret = drm_vma_offset_add(bdev->vma_manager, &bo->base.vma_node,
 					 PFN_UP(bo->base.size));
-		if (ret)
+		if (ret) {
+			drm_info(bo->base.dev, "drm vma offset add error\n");
 			goto err_put;
+		}
 	}
 
 	/* passed reservation objects should already be locked,
@@ -997,8 +1002,10 @@ int ttm_bo_init_reserved(struct ttm_device *bdev, struct ttm_buffer_object *bo,
 		dma_resv_assert_held(resv);
 
 	ret = ttm_bo_validate(bo, placement, ctx);
-	if (unlikely(ret))
+	if (unlikely(ret)) {
+		drm_info(bo->base.dev, "ttm bo validate error\n");
 		goto err_unlock;
+	}
 
 	return 0;
 

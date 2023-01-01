@@ -60,7 +60,8 @@ u64 gen8_pde_encode(struct xe_bo *bo, u64 bo_offset,
 	u64 pde;
 	bool is_lmem;
 
-	pde = xe_bo_addr(bo, bo_offset, GEN8_PAGE_SIZE, &is_lmem);
+	pde = xe_bo_addr(bo, bo_offset, PAGE_SIZE, &is_lmem);
+	drm_info(&gt_to_xe(bo->gt)->drm, "gen8_pde_encode %lld\n", pde);
 	pde |= GEN8_PAGE_PRESENT | GEN8_PAGE_RW;
 
 	XE_WARN_ON(IS_DGFX(xe_bo_device(bo)) && !is_lmem);
@@ -151,7 +152,7 @@ u64 gen8_pte_encode(struct xe_vma *vma, struct xe_bo *bo,
 	if (vma)
 		pte = vma_addr(vma, offset, GEN8_PAGE_SIZE, &is_vram);
 	else
-		pte = xe_bo_addr(bo, offset, GEN8_PAGE_SIZE, &is_vram);
+		pte = xe_bo_addr(bo, offset, PAGE_SIZE, &is_vram);
 
 	if (is_vram) {
 		pte |= GEN12_PPGTT_PTE_LM;
