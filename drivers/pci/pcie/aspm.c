@@ -1130,7 +1130,18 @@ int pci_disable_link_state(struct pci_dev *pdev, int state)
 }
 EXPORT_SYMBOL(pci_disable_link_state);
 
-static int __pci_enable_link_state(struct pci_dev *pdev, int state, bool locked)
+/**
+ * pci_enable_link_state - Clear and set the default device link state so that
+ * the link may be allowed to enter the specified states. Note that if the
+ * BIOS didn't grant ASPM control to the OS, this does nothing because we can't
+ * touch the LNKCTL register. Also note that this does not enable states
+ * disabled by pci_disable_link_state(). Return 0 or a negative errno.
+ *
+ * @pdev: PCI device
+ * @state: Mask of ASPM link states to enable
+ * @sem: Boolean to acquire/release pci_bus_sem
+ */
+int pci_enable_link_state(struct pci_dev *pdev, int state, bool sem)
 {
 	struct pcie_link_state *link = pcie_aspm_get_link(pdev);
 
@@ -1147,7 +1158,7 @@ static int __pci_enable_link_state(struct pci_dev *pdev, int state, bool locked)
 		return -EPERM;
 	}
 
-	if (!locked)
+	if (sem)
 		down_read(&pci_bus_sem);
 	mutex_lock(&aspm_lock);
 	link->aspm_default = 0;
@@ -1169,7 +1180,7 @@ static int __pci_enable_link_state(struct pci_dev *pdev, int state, bool locked)
 	link->clkpm_default = (state & PCIE_LINK_STATE_CLKPM) ? 1 : 0;
 	pcie_set_clkpm(link, policy_to_clkpm_state(link));
 	mutex_unlock(&aspm_lock);
-	if (!locked)
+	if (sem)
 		up_read(&pci_bus_sem);
 
 	return 0;

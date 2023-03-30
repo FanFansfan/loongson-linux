@@ -973,7 +973,7 @@ static int qcom_pcie_enable_aspm(struct pci_dev *pdev, void *userdata)
 	 * substates.
 	 */
 	pci_set_power_state(pdev, PCI_D0);
-	pci_enable_link_state_locked(pdev, PCIE_LINK_STATE_ALL);
+	pci_enable_link_state(pdev, PCIE_LINK_STATE_ALL, false);
 
 	return 0;
 }
