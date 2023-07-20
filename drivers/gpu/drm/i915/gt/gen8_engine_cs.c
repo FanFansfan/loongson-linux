@@ -39,11 +39,11 @@ int gen8_emit_flush_rcs(struct i915_request *rq, u32 mode)
 		 * On GEN9: before VF_CACHE_INVALIDATE we need to emit a NULL
 		 * pipe control.
 		 */
-		if (GRAPHICS_VER(rq->engine->i915) == 9)
+		if (GRAPHICS_VER(rq->i915) == 9)
 			vf_flush_wa = true;
 
 		/* WaForGAMHang:kbl */
-		if (IS_KBL_GRAPHICS_STEP(rq->engine->i915, 0, STEP_C0))
+		if (IS_KBL_GRAPHICS_STEP(rq->i915, 0, STEP_C0))
 			dc_flush_wa = true;
 	}
 
@@ -226,8 +226,8 @@ u32 *gen12_emit_aux_table_inv(struct intel_engine_cs *engine, u32 *cs)
 static int mtl_dummy_pipe_control(struct i915_request *rq)
 {
 	/* Wa_14016712196 */
-	if (IS_MTL_GRAPHICS_STEP(rq->engine->i915, M, STEP_A0, STEP_B0) ||
-	    IS_MTL_GRAPHICS_STEP(rq->engine->i915, P, STEP_A0, STEP_B0)) {
+	if (IS_MTL_GRAPHICS_STEP(rq->i915, M, STEP_A0, STEP_B0) ||
+	    IS_MTL_GRAPHICS_STEP(rq->i915, P, STEP_A0, STEP_B0)) {
 		u32 *cs;
 
 		/* dummy PIPE_CONTROL + depth flush */
@@ -360,8 +360,19 @@ int gen12_emit_flush_xcs(struct i915_request *rq, u32 mode)
 	if (mode & EMIT_INVALIDATE) {
 		cmd += 2;
 
+<<<<<<< HEAD
 		if (gen12_needs_ccs_aux_inv(rq->engine))
 			cmd += 8;
+=======
+		if (!HAS_FLAT_CCS(rq->i915) &&
+		    (rq->engine->class == VIDEO_DECODE_CLASS ||
+		     rq->engine->class == VIDEO_ENHANCEMENT_CLASS)) {
+			aux_inv = rq->engine->mask &
+				~GENMASK(_BCS(I915_MAX_BCS - 1), BCS0);
+			if (aux_inv)
+				cmd += 4;
+		}
+>>>>>>> d3f23ab93a1e (drm/i915: use direct alias for i915 in requests)
 	}
 
 	cs = intel_ring_begin(rq, cmd);
@@ -798,7 +809,7 @@ u32 *gen12_emit_fini_breadcrumb_xcs(struct i915_request *rq, u32 *cs)
 
 u32 *gen12_emit_fini_breadcrumb_rcs(struct i915_request *rq, u32 *cs)
 {
-	struct drm_i915_private *i915 = rq->engine->i915;
+	struct drm_i915_private *i915 = rq->i915;
 	u32 flags = (PIPE_CONTROL_CS_STALL |
 		     PIPE_CONTROL_TLB_INVALIDATE |
 		     PIPE_CONTROL_TILE_CACHE_FLUSH |
@@ -819,7 +830,7 @@ u32 *gen12_emit_fini_breadcrumb_rcs(struct i915_request *rq, u32 *cs)
 		/* Wa_1409600907 */
 		flags |= PIPE_CONTROL_DEPTH_STALL;
 
-	if (!HAS_3D_PIPELINE(rq->engine->i915))
+	if (!HAS_3D_PIPELINE(rq->i915))
 		flags &= ~PIPE_CONTROL_3D_ARCH_FLAGS;
 	else if (rq->engine->class == COMPUTE_CLASS)
 		flags &= ~PIPE_CONTROL_3D_ENGINE_FLAGS;
