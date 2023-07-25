@@ -1371,7 +1371,14 @@ gen12_emit_indirect_ctx_rcs(const struct intel_context *ce, u32 *cs)
 	    IS_DG2_G11(ce->engine->i915))
 		cs = gen8_emit_pipe_control(cs, PIPE_CONTROL_INSTRUCTION_CACHE_INVALIDATE, 0);
 
+<<<<<<< HEAD
 	cs = gen12_emit_aux_table_inv(ce->engine, cs);
+=======
+	/* hsdes: 1809175790 */
+	if (!HAS_FLAT_CCS(ce->engine->i915))
+		cs = gen12_emit_aux_table_inv(ce->engine->gt,
+					      cs, GEN12_CCS_AUX_INV);
+>>>>>>> 2f0b927d3ca3 (drm/i915/gt: Cleanup aux invalidation registers)
 
 	/* Wa_16014892111 */
 	if (IS_MTL_GRAPHICS_STEP(ce->engine->i915, M, STEP_A0, STEP_B0) ||

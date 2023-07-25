@@ -360,19 +360,8 @@ int gen12_emit_flush_xcs(struct i915_request *rq, u32 mode)
 	if (mode & EMIT_INVALIDATE) {
 		cmd += 2;
 
-<<<<<<< HEAD
 		if (gen12_needs_ccs_aux_inv(rq->engine))
 			cmd += 8;
-=======
-		if (!HAS_FLAT_CCS(rq->i915) &&
-		    (rq->engine->class == VIDEO_DECODE_CLASS ||
-		     rq->engine->class == VIDEO_ENHANCEMENT_CLASS)) {
-			aux_inv = rq->engine->mask &
-				~GENMASK(_BCS(I915_MAX_BCS - 1), BCS0);
-			if (aux_inv)
-				cmd += 4;
-		}
->>>>>>> d3f23ab93a1e (drm/i915: use direct alias for i915 in requests)
 	}
 
 	cs = intel_ring_begin(rq, cmd);
