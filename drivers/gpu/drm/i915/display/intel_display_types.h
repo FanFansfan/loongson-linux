@@ -46,6 +46,7 @@
 #include <drm/i915_hdcp_interface.h>
 #include <media/cec-notifier.h>
 
+#include "i915_utils.h"
 #include "i915_vma.h"
 #include "i915_vma_types.h"
 #include "intel_bios.h"
