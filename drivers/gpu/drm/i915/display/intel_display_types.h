@@ -759,9 +759,7 @@ struct intel_plane_state {
 	 * this plane. They're calculated by the linked plane's wm code.
 	 */
 	u32 planar_slave;
-
 	struct drm_intel_sprite_colorkey ckey;
-
 	struct drm_rect psr2_sel_fetch_area;
 
 	/* Clear Color Value */
