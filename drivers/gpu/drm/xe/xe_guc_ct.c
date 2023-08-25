@@ -135,7 +135,7 @@ int xe_guc_ct_init(struct xe_guc_ct *ct)
 	struct xe_bo *bo;
 	int err;
 
-	XE_WARN_ON(guc_ct_size() % PAGE_SIZE);
+	XE_WARN_ON(guc_ct_size() % XE_PAGE_SIZE);
 
 	mutex_init(&ct->lock);
 	spin_lock_init(&ct->fast_lock);
