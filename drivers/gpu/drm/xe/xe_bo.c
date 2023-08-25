@@ -1217,7 +1217,8 @@ struct xe_bo *__xe_bo_create_locked(struct xe_device *xe, struct xe_bo *bo,
 		flags |= XE_BO_INTERNAL_64K;
 		alignment = SZ_64K >> PAGE_SHIFT;
 	} else {
-		alignment = SZ_4K >> PAGE_SHIFT;
+		size = ALIGN(size, PAGE_SIZE);
+		alignment = PAGE_SIZE >> PAGE_SHIFT;
 	}
 
 	bo->tile = tile;
