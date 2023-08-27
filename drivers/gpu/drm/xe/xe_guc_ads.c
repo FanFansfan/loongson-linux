@@ -528,7 +528,7 @@ static void guc_um_init_params(struct xe_guc_ads *ads)
 	int i;
 
 	base_ggtt = xe_bo_ggtt_addr(ads->bo) + um_queue_offset;
-	base_dpa = xe_bo_main_addr(ads->bo, PAGE_SIZE) + um_queue_offset;
+	base_dpa = xe_bo_main_addr(ads->bo, XE_PAGE_SIZE) + um_queue_offset;
 
 	for (i = 0; i < GUC_UM_HW_QUEUE_MAX; ++i) {
 		ads_blob_write(ads, um_init_params.queue_params[i].base_dpa,
