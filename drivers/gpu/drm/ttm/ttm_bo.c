@@ -998,7 +998,7 @@ int ttm_bo_init_reserved(struct ttm_device *bdev, struct ttm_buffer_object *bo,
 		WARN_ON(!dma_resv_trylock(bo->base.resv));
 	else
 		dma_resv_assert_held(resv);
-
+	// 可能在这里换入换出
 	ret = ttm_bo_validate(bo, placement, ctx);
 	if (unlikely(ret))
 		goto err_unlock;

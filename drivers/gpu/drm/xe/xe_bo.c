@@ -1672,7 +1672,7 @@ dma_addr_t __xe_bo_addr(struct xe_bo *bo, u64 offset, size_t page_size)
 	struct xe_res_cursor cur;
 	u64 page;
 
-	XE_WARN_ON(page_size > PAGE_SIZE);
+	BUG_ON(page_size > PAGE_SIZE);
 	page = offset >> PAGE_SHIFT;
 	offset &= (PAGE_SIZE - 1);
 

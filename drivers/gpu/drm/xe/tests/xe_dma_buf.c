@@ -71,6 +71,7 @@ static void check_residency(struct kunit *test, struct xe_bo *exported,
 		return;
 	}
 
+	// 挂了
 	/* Verify that also importer has been evicted to SYSTEM */
 	if (!xe_bo_is_mem_type(imported, XE_PL_SYSTEM)) {
 		KUNIT_FAIL(test, "Importer wasn't properly evicted.\n");

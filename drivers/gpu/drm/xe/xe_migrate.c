@@ -111,6 +111,7 @@ static u64 xe_migrate_vm_addr(u64 slot, u32 level)
 	XE_WARN_ON(slot >= NUM_PT_SLOTS);
 
 	/* First slot is reserved for mapping of PT bo and bb, start from 1 */
+	/* TODO 16K 时reserve？*/ 
 	return (slot + 1ULL) << xe_pt_shift(level + 1);
 }
 
@@ -157,6 +158,7 @@ static int xe_migrate_create_cleared_bo(struct xe_migrate *m, struct xe_vm *vm)
 static int xe_migrate_prepare_vm(struct xe_tile *tile, struct xe_migrate *m,
 				 struct xe_vm *vm)
 {
+	// 以下要修改 xe_bo_addr 的计算？
 	struct xe_device *xe = tile_to_xe(tile);
 	u8 id = tile->id;
 	u32 num_entries = NUM_PT_SLOTS, num_level = vm->pt_root[id]->level;
@@ -427,6 +429,7 @@ static u32 pte_update_size(struct xe_migrate *m,
 	if (!is_vram) {
 		/* Clip L0 to available size */
 		u64 size = min(*L0, (u64)avail_pts * SZ_2M);
+		// size 不是16k对齐时，fix
 		u64 num_4k_pages = DIV_ROUND_UP(size, XE_PAGE_SIZE);
 
 		*L0 = size;
@@ -470,6 +473,7 @@ static void emit_pte(struct xe_migrate *m,
 	ptes = DIV_ROUND_UP(size, XE_PAGE_SIZE);
 
 	while (ptes) {
+		// 0x1ff = 511
 		u32 chunk = min(0x1ffU, ptes);
 
 		bb->cs[bb->len++] = MI_STORE_DATA_IMM | BIT(21) |
@@ -481,27 +485,32 @@ static void emit_pte(struct xe_migrate *m,
 		ofs += chunk * 8;
 		ptes -= chunk;
 
-		while (chunk--) {
-			u64 addr;
+		// 页面对齐到16k, chunk也会对齐到4？
+		int i;
+		for (i = 0; i < chunk / 4; i++) {
+			u64 base_addr;
+			base_addr = xe_res_dma(cur);
+			int j;
+			for (j = 0; j < 4; ++j) {
+				u64 addr = base_addr & PAGE_MASK;
+				if (is_vram) {
+					/* Is this a 64K PTE entry? */
+					if ((m->q->vm->flags & XE_VM_FLAG_64K) &&
+						!(cur_ofs & (16 * 8 - 1))) {
+						XE_WARN_ON(!IS_ALIGNED(addr, SZ_64K));
+						addr |= XE_PTE_PS64;
+					}
 
-			addr = xe_res_dma(cur) & PAGE_MASK;
-			if (is_vram) {
-				/* Is this a 64K PTE entry? */
-				if ((m->q->vm->flags & XE_VM_FLAG_64K) &&
-				    !(cur_ofs & (16 * 8 - 1))) {
-					XE_WARN_ON(!IS_ALIGNED(addr, SZ_64K));
-					addr |= XE_PTE_PS64;
+					addr += vram_region_gpu_offset(bo->ttm.resource);
+					addr |= XE_PPGTT_PTE_DM;
 				}
-
-				addr += vram_region_gpu_offset(bo->ttm.resource);
-				addr |= XE_PPGTT_PTE_DM;
+				addr |= PPAT_CACHED | XE_PAGE_PRESENT | XE_PAGE_RW;
+				bb->cs[bb->len++] = lower_32_bits(addr);
+				bb->cs[bb->len++] = upper_32_bits(addr);
+				cur_ofs += 8;
+				base_addr += XE_PAGE_SIZE;
 			}
-			addr |= PPAT_CACHED | XE_PAGE_PRESENT | XE_PAGE_RW;
-			bb->cs[bb->len++] = lower_32_bits(addr);
-			bb->cs[bb->len++] = upper_32_bits(addr);
-
 			xe_res_next(cur, min_t(u32, size, PAGE_SIZE));
-			cur_ofs += 8;
 		}
 	}
 }

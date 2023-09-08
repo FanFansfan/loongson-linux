@@ -1145,6 +1145,7 @@ xe_vm_find_overlapping_vma(struct xe_vm *vm, u64 start, u64 range)
 
 	XE_WARN_ON(start + range > vm->size);
 
+	// gpuva?
 	gpuva = drm_gpuva_find_first(&vm->mgr, start, range);
 
 	return gpuva ? gpuva_to_vma(gpuva) : NULL;
@@ -2213,6 +2214,7 @@ static void prep_vma_destroy(struct xe_vm *vm, struct xe_vma *vma,
 #if IS_ENABLED(CONFIG_DRM_XE_DEBUG_VM)
 static void print_op(struct xe_device *xe, struct drm_gpuva_op *op)
 {
+	// 打印日志
 	struct xe_vma *vma;
 
 	switch (op->op) {
@@ -3173,6 +3175,7 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe,
 			goto free_bind_ops;
 		}
 
+		// page 对齐？ 修改min alignment
 		if (XE_IOCTL_DBG(xe, obj_offset & ~PAGE_MASK) ||
 		    XE_IOCTL_DBG(xe, addr & ~PAGE_MASK) ||
 		    XE_IOCTL_DBG(xe, range & ~PAGE_MASK) ||
@@ -3310,6 +3313,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 		u32 obj = bind_ops[i].obj;
 		u64 obj_offset = bind_ops[i].obj_offset;
 
+		// create bo出来的obj
 		if (!obj)
 			continue;
 
