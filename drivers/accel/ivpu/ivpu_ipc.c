@@ -202,6 +202,20 @@ unlock:
 	return ret;
 }
 
+static int ivpu_ipc_rx_need_wakeup(struct ivpu_ipc_consumer *cons)
+{
+	int ret = 0;
+
+	if (IS_KTHREAD())
+		ret |= (kthread_should_stop() || kthread_should_park());
+
+	spin_lock_irq(&cons->rx_msg_lock);
+	ret |= !list_empty(&cons->rx_msg_list);
+	spin_unlock_irq(&cons->rx_msg_lock);
+
+	return ret;
+}
+
 int ivpu_ipc_receive(struct ivpu_device *vdev, struct ivpu_ipc_consumer *cons,
 		     struct ivpu_ipc_hdr *ipc_buf,
 		     struct vpu_jsm_msg *ipc_payload, unsigned long timeout_ms)
